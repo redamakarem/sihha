@@ -1,0 +1,370 @@
+<?php
+/**
+ * @file
+ * This is the main module file.
+ */
+
+ /**
+ * Implements hook_help().
+ */
+function appointment_extras_help($path, $arg) {
+
+  if ($path == 'admin/help#appointment_extras') {
+    $output = '<h3>' . t('About') . '</h3>';
+    $output .= '<p>' . t('The Appointment extras module handles the custom requirements for appointments.') . '</p>';
+    return $output;
+  }
+}
+
+/**
+ * Implements hook_rules_condition_info().
+ */
+function appointment_extras_rules_condition_info() {
+  return array(
+    'appointment_within_working_hours' => array(
+      'group' => t('Clinic'),
+      'label' => t('Appointment within working hours'),
+      'parameter' => array(
+        'appointment_date' => array(
+          'type' => 'date',
+          'label' => t('Date and time of the appointment'),
+        ),
+        'start_time' => array(
+          'type' => 'text',
+          'label' => t('Start Time'),
+        ),
+        'end_time' => array(
+          'type' => 'text',
+          'label' => t('End Time'),
+        )
+      ),
+    ),
+      'query_string_exists' => array(
+      'group' => t('Clinic'),
+      'label' => t('Query String Exists'),
+      'parameter' => array(
+        'query_string_key' => array(
+          'type' => 'text',
+          'label' => t('The key of the query string'),
+        )
+      ),
+    ),
+  );
+}
+
+/**
+ * Callback function for custom condition info
+ */
+function appointment_within_working_hours($appointment_date,$start_time, $end_time) {
+    $time = date("H:i:s",strtotime($appointment_date));
+    $php_timestamp_date = date("H:i", $appointment_date);
+    dpm($php_timestamp_date);
+
+
+}
+
+function query_string_exists($query_string_key){
+    if (!empty($_GET[$query_string_key]) && !$options['external']) {
+        return true;
+  }
+    else{
+        return false;
+    }
+}
+
+/**
+ *  Implement hook_validate
+ */
+
+
+
+ function appointment_extras_form_appointment_node_form_alter(&$form, &$form_state, $form_id)
+ {
+//     dpm($form);
+   $form['#validate'][]='appointment_extras_form_appointment_validation';
+   $form['#submit'][] = "appointment_extras_form_appointment_submit";
+   $form['#after_build'][] = 'appointment_extras_after_build';
+   $form['field_appointment_doctor']['und']['#default_value']=arg(3);
+   $form['field_appointment_doctor']['#attributes']['readonly'] = 'readonly';
+   $form['actions']['submit']['#value']= t('Book Now');
+
+     if(!isset($_SESSION['appointment_duration']))
+    {
+    $_SESSION['appointment_duration'] = array();
+    }
+//     $duration_minutes = $_SESSION['appointment_duration'];
+          $duration_minutes = arg(4);
+
+     $form['title_field']['#suffix']="<div class='appdur'>" . $duration_minutes . "<div>";
+
+
+
+ }
+
+ function appointment_extras_form_appointment_validation(&$form, &$form_state)
+ {
+      dpm($form_state);
+      //  date_default_timezone_set('Asia/Kuwait');
+      $doctor_id=$form_state['values']['field_appointment_doctor']['und'][0]['target_id'];
+      $submitted_start_date=$form_state['values']['field_appointment_date']['und'][0]['value'];
+      //GMT Fix
+      // $submitted_start_date= date("Y-m-d H:i", strtotime("+3 hours",strtotime($submitted_start_date)));
+
+
+      //dpm($doctor_id);
+      $submitted_end_date= date("Y-m-d H:i", strtotime("+15 minutes",strtotime($submitted_start_date)));
+      //dpm($submitted_end_date);
+      $submitted_start_time = explode(" ",$submitted_start_date)[1];
+      $submitted_end_time = explode(" ",$submitted_end_date)[1];
+      // dpm($submitted_start_time);
+      // dpm($submitted_end_time);
+      $submitted_start_time=strtotime($submitted_start_time);
+      $submitted_end_time=strtotime($submitted_end_time);
+
+
+  $profile = user_load($doctor_id);
+  //dpm($profile);
+  if ($profile->field_start_time['und'][0]['value']){
+    $start_time=$profile->field_start_time['und'][0]['value'];
+    $start_time=strtotime($start_time);
+  }
+  if ($profile->field_end_time['und'][0]['value']){
+    $end_time=$profile->field_end_time['und'][0]['value'];
+    $end_time=strtotime($end_time);
+  }
+    // dpm($start_time);
+    // dpm($end_time);
+  if($submitted_start_time <$start_time){
+  form_set_error('field_appointment_date',t('Chosen time is outside Doctor working hours'));
+  // dpm($start_time);
+  // dpm($submitted_start_time);
+  }
+
+if($submitted_end_time>$end_time){
+    form_set_error('field_appointment_date',t('Chosen time is outside Doctor working hours'));
+    // dpm($end_time);
+    // dpm($submitted_end_date);
+}
+
+ }
+
+function appointment_extras_form_appointment_submit($form, &$form_state)
+ {
+         $submitted_start_date=$form_state['values']['field_appointment_date']['und'][0]['value'];
+         //GMT Fix
+      // $submitted_start_date= date("Y-m-d H:i", strtotime("+3 hours",strtotime($submitted_start_date)));
+    // $submitted_end_date= date("Y-m-d H:i", strtotime($submitted_start_date . "+15 minutes"));
+//$form_state['values']['field_appointment_date']['und'][0]['value2']=$submitted_end_date;
+
+ }
+
+ function appointment_extras_after_build($form, &$form_state)
+ {
+   $path = drupal_get_path('module', 'appointment_extras');
+  drupal_add_js("$path/appointment_extras.js");
+  return $form;
+ }
+
+ function appointment_extras_inline_entity_form_entity_form_alter(&$form, &$form_state) {
+    $form['status']['#access'] = FALSE;
+    dpm($form);
+}
+
+function appointment_extras_rules_action_info(){
+    $actions=array(
+        'store_query_string_in_session' =>array(
+            'label' => t('Store query string in session'),
+            'group' => t('Clinic'),
+            'parameter' => array(
+                'query_string_key' => array(
+                    'type' => 'text',
+                    'label' => t('Query string key'),
+                ),
+            ),
+        ),
+        'display_progress_message' =>array(
+            'label' => t('Display progress message'),
+            'group' => t('Clinic'),
+            'parameter' => array(
+                'progress_message_string' => array(
+                    'type' => 'text',
+                    'label' => t('Progess message'),
+                ),
+            ),
+        ),
+    );
+
+    return $actions;
+
+}
+
+
+function display_progress_message($progress_message_string){
+//    drupal_set_message($progress_message_string, 'custom-class');
+    $message_string="<div class='progress-msg'>" . $progress_message_string . "<div>";
+    drupal_set_message($message_string, 'custom-class');
+
+
+}
+
+function store_query_string_in_session($query_string_key){
+    if(!isset($_SESSION['appointment_duration']))
+    {
+    $_SESSION['appointment_duration'] = array();
+    }
+    if (!empty($_GET[$query_string_key]) && !$options['external']) {
+        $_SESSION['appointment_duration']=$_GET[$query_string_key];
+
+  }
+    $duration_minutes = $_SESSION['appointment_duration'];
+      //drupal_set_message($duration_minutes, 'status');
+
+}
+
+
+function startsWith($haystack, $needle)
+{
+  $length = strlen($needle);
+  return (substr($haystack, 0, $length) === $needle);
+}
+
+function endsWith($haystack, $needle)
+{
+  $length = strlen($needle);
+  if ($length == 0) {
+  return true;
+}
+
+  return (substr($haystack, -$length) === $needle);
+}
+
+//function appointment_extras_status_messages(&$variables) {
+//  dpm(drupal_get_messages($variables['display']));
+//
+//}
+
+
+function appointment_extras_views_pre_execute(&$view){
+  if ($view->name == 'treatments_search') {
+
+      $sql = "SELECT DISTINCT taxonomy_term_data_node.tid AS taxonomy_term_data_node_tid
+FROM
+{node} node
+LEFT JOIN {field_data_field_treatments} field_data_field_treatments ON node.nid = field_data_field_treatments.field_treatments_target_id AND (field_data_field_treatments.entity_type = 'node' AND field_data_field_treatments.deleted = '0')
+LEFT JOIN {node} field_treatments_node ON field_data_field_treatments.entity_id = field_treatments_node.nid
+INNER JOIN (SELECT td.*, tn.nid AS nid
+FROM
+{taxonomy_term_data} td
+INNER JOIN {taxonomy_vocabulary} tv ON td.vid = tv.vid
+INNER JOIN {taxonomy_index} tn ON tn.tid = td.tid
+WHERE  (tv.machine_name IN  ('specialty')) ) taxonomy_term_data_node ON node.nid = taxonomy_term_data_node.nid
+WHERE (( (node.status = '1') AND (node.type IN  ('treatment')) ))
+LIMIT 10 OFFSET 0";
+      $query= db_query($sql);
+      $qq=&$view->build_info['query'];
+      $qq==$query;
+
+//      dpm($result);
+//      $tables=& $query ->alterMetaData['view']->query->tables;
+//      unset($tables['node']['field_treatments_node']);
+//            dpm($query);
+
+  }
+}
+
+
+//function appointment_extras_views_query_alter(&$view, &$query){
+////            dpm($view);
+////    && $view->exposed_raw_input['treatment_filter']
+//    if ($view->name == 'clinics'){
+//        $treatment_tid=$view->exposed_raw_input['treatment_filter'];
+//        $treatment_nodes = db_query_range("SELECT node.title AS node_title, node.nid AS nid, node.language AS node_language, node.created AS node_created
+//FROM
+//{node} node
+//INNER JOIN {field_data_field_treatments} field_data_field_treatments ON node.nid = field_data_field_treatments.field_treatments_target_id AND (field_data_field_treatments.entity_type = 'node' AND field_data_field_treatments.deleted = '0')
+//INNER JOIN {node} field_treatments_node ON field_data_field_treatments.entity_id = field_treatments_node.nid
+//INNER JOIN {field_data_field_treatment} field_data_field_treatment ON node.nid = field_data_field_treatment.entity_id AND (field_data_field_treatment.entity_type = 'node' AND field_data_field_treatment.deleted = '0')
+//WHERE (( (node.status = '1') AND (node.type IN  ('treatment')) AND (field_data_field_treatment.field_treatment_tid =:tid) ))
+//ORDER BY node_created DESC",0,50,
+//                          array(':tid' => $treatment_tid))->fetchAll();
+//        $nids=array();
+//        foreach($treatment_nodes as $treatment_node){
+//            $nid=$treatment_node->nid;
+//            $nids[]=$nid;
+//        }
+//        $conditions_size=count($query->where[1]['conditions']);
+//        $foreach_count=0;
+//        foreach($query->where[1]['conditions'] as $condition){
+//            if($condition['field']=='field_data_field_treatments.field_treatments_target_id'){
+////                dpm($condition);
+//                $query->where[1]['conditions'][$foreach_count]=array(
+//                'field' => 'field_data_field_treatments.field_treatments_target_id',
+//                'value' =>$nids,
+//                'operator' =>'in'
+//                );
+//
+//            }
+//            dpm($query->where[1]['conditions']);
+//            $foreach_count++;
+//
+//        }
+//    }
+//}
+
+function appointment_extras_form_alter(&$form, &$form_state, $form_id){
+    if($form['#id'] == 'views-exposed-form-clinics-page'){
+
+//        dpm($form);
+    $form['field_specialty_tid_i18n']['#type']='select';
+    $form['field_specialty_tid_i18n']['#size'] = null;
+
+
+/*Query Approach*/
+
+
+//    $specialties_list=db_query_range("SELECT taxonomy_term_data.tid AS tid, taxonomy_term_data.name AS taxonomy_term_data_name, taxonomy_term_data.vid AS taxonomy_term_data_vid, taxonomy_vocabulary.machine_name AS taxonomy_vocabulary_machine_name
+//FROM
+//{taxonomy_term_data} taxonomy_term_data
+//LEFT JOIN {taxonomy_term_hierarchy} taxonomy_term_hierarchy ON taxonomy_term_data.tid = taxonomy_term_hierarchy.tid
+//LEFT JOIN {taxonomy_term_data} taxonomy_term_data_taxonomy_term_hierarchy ON taxonomy_term_hierarchy.parent = taxonomy_term_data_taxonomy_term_hierarchy.tid
+//LEFT JOIN {taxonomy_vocabulary} taxonomy_vocabulary ON taxonomy_term_data.vid = taxonomy_vocabulary.vid
+//WHERE (( (taxonomy_vocabulary.machine_name IN  ('specialty')) AND (taxonomy_term_hierarchy.parent = '') ))",0,50)->fetchAll();
+//        dpm($specialties_list);
+//
+
+//    /*View approach test*/
+//
+//
+$display = 'page';
+////$filter_name = 'changed';
+$view = views_get_view('specialties_search');
+//        dpm($view);
+$view->set_display($display);
+$view->set_items_per_page(0);
+$view->render();
+$response = $view->result;
+
+$specialties_array=array();
+//        dpm($response);
+
+    foreach($response as $response_item){
+        $item_key=$response_item->tid;
+        if (!array_key_exists($item_key, $specialties_array)){
+        $specialties_array[$item_key] = $response_item->taxonomy_term_data_name;
+        }
+
+    }
+//        dpm($specialties_array);
+
+        $treatments_array=array('All' => t('All')) + $specialties_array;
+    $form['field_specialty_tid_i18n']['#options'] = $treatments_array;
+//        /*End of View approach test*/
+    }
+
+    if($form['#id']=='views-exposed-form-sihha-doctors-page'){
+//        dpm($form);
+
+
+    }
+
+}

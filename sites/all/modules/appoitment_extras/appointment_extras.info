@@ -1,0 +1,6 @@
+name = Appointment Extras
+description = This module handles appointments custom requirements.
+core = 7.x
+
+
+scripts[] = js/appointment_extras.js
